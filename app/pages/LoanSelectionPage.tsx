@@ -2,17 +2,22 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import Link from 'next/link'
 import { ArrowLeft, CheckCircle, Info } from 'lucide-react'
 
 interface LoanSelectionPageProps {
   userName: string
+  phoneNumber: string
   onBack: () => void
+  onSelectLoan: (amount: number) => void
 }
 
-export default function LoanSelectionPage({ userName, onBack }: LoanSelectionPageProps) {
+export default function LoanSelectionPage({ 
+  userName, 
+  phoneNumber,
+  onBack, 
+  onSelectLoan 
+}: LoanSelectionPageProps) {
   const [selectedAmount, setSelectedAmount] = useState<number | null>(null)
-  const [showBreakdown, setShowBreakdown] = useState(false)
 
   const loanOptions = [
     { amount: 5000, label: 'KSh 5,000' },
@@ -29,7 +34,10 @@ export default function LoanSelectionPage({ userName, onBack }: LoanSelectionPag
 
   const handleSelect = (amount: number) => {
     setSelectedAmount(amount)
-    setShowBreakdown(true)
+    // Navigate to confirmation after a brief delay
+    setTimeout(() => {
+      onSelectLoan(amount)
+    }, 500)
   }
 
   return (
@@ -100,19 +108,13 @@ export default function LoanSelectionPage({ userName, onBack }: LoanSelectionPag
           ))}
         </div>
 
-        {/* Breakdown Message */}
-        {showBreakdown && selectedAmount && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 flex items-start gap-3">
-            <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-blue-800">
-              Tap an amount to see the full breakdown, including any processing fee.
-              <br />
-              <span className="font-medium">
-                Selected: KSh {selectedAmount.toLocaleString()}
-              </span>
-            </p>
-          </div>
-        )}
+        {/* Info Message */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 flex items-start gap-3">
+          <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-blue-800">
+            Tap an amount to see the full breakdown, including any processing fee.
+          </p>
+        </div>
 
         {/* Back Button */}
         <div className="text-center">

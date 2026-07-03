@@ -3,10 +3,10 @@
 import { useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import Loader from './Loader'
 import { Shield, Lock, CheckCircle, ArrowLeft } from 'lucide-react'
-
+import Loader from './Loader'
 import LoanSelectionPage from './LoanSelectionPage'
+import LoanConfirmationPage from './LoanConfirmationPage'
 
 export default function ApplyPage() {
   const [formData, setFormData] = useState({
@@ -19,7 +19,9 @@ export default function ApplyPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isApproved, setIsApproved] = useState(false)
+  const [showConfirmation, setShowConfirmation] = useState(false)
   const [userName, setUserName] = useState('')
+  const [selectedLoanAmount, setSelectedLoanAmount] = useState<number | null>(null)
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -45,9 +47,17 @@ export default function ApplyPage() {
     setIsSubmitting(false)
   }
 
+  const handleSelectLoan = (amount: number) => {
+    setSelectedLoanAmount(amount)
+    setShowConfirmation(true)
+    setIsApproved(false)
+  }
+
   const handleBackToForm = () => {
     setIsApproved(false)
+    setShowConfirmation(false)
     setIsSubmitting(false)
+    setSelectedLoanAmount(null)
     setFormData({
       fullName: '',
       phoneNumber: '',
@@ -56,14 +66,45 @@ export default function ApplyPage() {
     })
   }
 
+  const handleBackToOffers = () => {
+    setShowConfirmation(false)
+    setIsApproved(true)
+    setSelectedLoanAmount(null)
+  }
+
+  const handleApplyLoan = () => {
+    // Loan application submitted
+    alert(`Loan of KSh ${selectedLoanAmount?.toLocaleString()} approved!`)
+  }
+
   // Show loader
   if (isLoading) {
     return <Loader onComplete={handleLoaderComplete} />
   }
 
+  // Show loan confirmation
+  if (showConfirmation && selectedLoanAmount) {
+    return (
+      <LoanConfirmationPage
+        userName={userName}
+        loanAmount={selectedLoanAmount}
+        phoneNumber={formData.phoneNumber}
+        onBack={handleBackToOffers}
+        onApply={handleApplyLoan}
+      />
+    )
+  }
+
   // Show loan selection screen
   if (isApproved) {
-    return <LoanSelectionPage userName={userName} onBack={handleBackToForm} />
+    return (
+      <LoanSelectionPage
+        userName={userName}
+        phoneNumber={formData.phoneNumber}
+        onBack={handleBackToForm}
+        onSelectLoan={handleSelectLoan}
+      />
+    )
   }
 
   // Show application form

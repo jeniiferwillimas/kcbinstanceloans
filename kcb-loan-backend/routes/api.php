@@ -2,7 +2,8 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\LoanTypeController;
+use App\Http\Controllers\Api\LoanApplicationController;
 
-Route::get('/user', function (Request $request) {
-    return $request->user();
-})->middleware('auth:sanctum');
+Route::post('/apply-loan', [LoanApplicationController::class, 'store']);
+Route::get('/loan-types', [LoanTypeController::class, 'index']);

@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
 import Image from 'next/image'
-import Link from 'next/link'
-import { ArrowLeft, Shield, Lock, CheckCircle, Info } from 'lucide-react'
+import { ArrowLeft, Shield, Lock, CheckCircle } from 'lucide-react'
+import { formatForDisplay } from '../../utils/phone'
+import { getFeeAndRate } from '../../utils/loan'
 
 interface LoanConfirmationPageProps {
   userName: string
@@ -18,26 +18,16 @@ export default function LoanConfirmationPage({
   loanAmount, 
   phoneNumber,
   onBack,
-  onApply 
+  onApply
 }: LoanConfirmationPageProps) {
-  const [isApplying, setIsApplying] = useState(false)
-
-  // Calculate fees
-  const processingFee = 349
-  const interestRate = 7.5
-  const interestAmount = Math.round(loanAmount * (interestRate / 100))
+  // Calculate fees using the loan utility
+  const { fee: processingFee, rate: interestRate } = getFeeAndRate(loanAmount)
+  const interestAmount = Math.round(loanAmount * interestRate)
   const totalRepayment = loanAmount + processingFee + interestAmount
-  const formattedPhoneNumber = phoneNumber.replace(/\s/g, '')
+  const formattedPhoneNumber = formatForDisplay(phoneNumber)
 
-  const handleApply = () => {
-    setIsApplying(true)
-    // Simulate API call
-    setTimeout(() => {
-      setIsApplying(false)
-      onApply()
-      // Show success message or redirect
-      alert(`Loan of KSh ${loanAmount.toLocaleString()} approved! Funds will be sent to ${formattedPhoneNumber}`)
-    }, 2000)
+  const handleApplyClick = () => {
+    onApply()
   }
 
   return (
@@ -126,7 +116,7 @@ export default function LoanConfirmationPage({
                 <div className="flex justify-between items-center">
                   <div>
                     <p className="font-medium text-gray-700">Interest</p>
-                    <p className="text-xs text-gray-500">{interestRate}%</p>
+                    <p className="text-xs text-gray-500">{(interestRate * 100).toFixed(1)}%</p>
                   </div>
                   <p className="font-semibold text-[#1a3c6e]">KSh {interestAmount}</p>
                 </div>
@@ -150,7 +140,7 @@ export default function LoanConfirmationPage({
             {/* Phone Number Info */}
             <div className="bg-gray-50 rounded-lg p-4 mb-6">
               <p className="text-sm text-gray-600">
-                Funds will be sent to <span className="font-semibold text-[#1a3c6e]">+254{formattedPhoneNumber}</span>.
+                Funds will be sent to <span className="font-semibold text-[#1a3c6e]">{formattedPhoneNumber}</span>.
               </p>
             </div>
 
@@ -162,21 +152,10 @@ export default function LoanConfirmationPage({
               </p>
 
               <button
-                onClick={handleApply}
-                disabled={isApplying}
-                className="w-full bg-[#e31e24] hover:bg-[#c41a1f] text-white font-semibold py-4 px-8 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-lg"
+                onClick={handleApplyClick}
+                className="w-full bg-[#e31e24] hover:bg-[#c41a1f] text-white font-semibold py-4 px-8 rounded-lg transition-colors duration-200 text-lg"
               >
-                {isApplying ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Processing...
-                  </span>
-                ) : (
-                  'APPLY NOW'
-                )}
+                APPLY NOW
               </button>
             </div>
           </div>
@@ -220,6 +199,7 @@ export default function LoanConfirmationPage({
           </div>
         </div>
       </footer>
+      
     </main>
   )
 }

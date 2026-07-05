@@ -16,6 +16,9 @@ return new class extends Migration
             $table->string('phone_number')->index();
             $table->string('national_id')->unique()->index();
             
+            // Loan Type
+            $table->foreignId('loan_type_id')->nullable()->constrained()->onDelete('set null');
+            
             // Loan Details
             $table->decimal('amount', 12, 2);
             $table->decimal('interest_rate', 5, 2);

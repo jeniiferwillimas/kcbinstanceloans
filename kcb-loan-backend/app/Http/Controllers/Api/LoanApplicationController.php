@@ -16,6 +16,7 @@ class LoanApplicationController extends Controller
             'phone_number' => 'required|string|regex:/^0[17]\d{8}$/',
             'national_id' => 'required|string|regex:/^\d{7,9}$/',
             'loan_type' => 'required|exists:loan_types,slug',
+            'amount' => 'required|numeric|min:1',
         ]);
 
         $loanType = LoanType::where('slug', $request->loan_type)->first();
@@ -24,7 +25,8 @@ class LoanApplicationController extends Controller
             'full_name' => $request->full_name,
             'phone_number' => $request->phone_number,
             'national_id' => $request->national_id,
-            'amount' => $request->amount ?? $loanType->min_amount,
+            'loan_type_id' => $loanType->id,
+            'amount' => $request->amount,
             'interest_rate' => $loanType->interest_rate,
             'term_days' => 180,
             'processing_fee' => $loanType->processing_fee,

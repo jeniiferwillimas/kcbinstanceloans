@@ -4,91 +4,156 @@ import { useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { Shield, Lock, CheckCircle, ArrowLeft } from 'lucide-react'
-import Loader from './Loader'
+import ProcessingPage from './ProcessingPage'
 import LoanSelectionPage from './LoanSelectionPage'
 import LoanConfirmationPage from './LoanConfirmationPage'
+import { useAppDispatch, useAppSelector } from '@/store/hooks'
+import { resetLoanForm, setApplicantName, setLoanType, setNationalId, setPhoneNumber, setSelectedLoanAmount } from '@/store/loanSlice'
+import { initiateMpesaPayment } from '@/store/paymentSlice'
+import { buildEnvelope } from '@/utils/event'
+import { useRouter } from 'next/navigation'
+import { getFeeAndRate } from '@/utils/loan'
 
 export default function ApplyPage() {
-  const [formData, setFormData] = useState({
-    fullName: '',
-    phoneNumber: '',
-    nationalId: '',
-    loanType: '',
-  })
+  const router = useRouter()
+  const dispatch = useAppDispatch()
+  const {
+    phoneNumber,
+    loanType,
+    applicantName,
+    nationalId,
+    selectedLoanAmount,
+  } = useAppSelector((state) => state.loan)
 
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
   const [isApproved, setIsApproved] = useState(false)
   const [showConfirmation, setShowConfirmation] = useState(false)
-  const [userName, setUserName] = useState('')
-  const [selectedLoanAmount, setSelectedLoanAmount] = useState<number | null>(null)
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false)
+  const [isCheckingEligibility, setIsCheckingEligibility] = useState(false)
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
-    setFormData(prev => ({ ...prev, [name]: value }))
+
+    switch (name) {
+      case 'fullName':
+        dispatch(setApplicantName(value))
+        break
+      case 'phoneNumber':
+        dispatch(setPhoneNumber(value))
+        break
+      case 'nationalId':
+        dispatch(setNationalId(value))
+        break
+      case 'loanType':
+        dispatch(setLoanType(value))
+        break
+      default:
+        break
+    }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    
-    // Save user name
-    setUserName(formData.fullName.split(' ')[0])
-    
-    // Show submitting state
     setIsSubmitting(true)
-    
-    // Show loader
-    setIsLoading(true)
-  }
+    setIsCheckingEligibility(true)
 
-  const handleLoaderComplete = () => {
-    setIsLoading(false)
-    setIsApproved(true)
-    setIsSubmitting(false)
+    window.setTimeout(() => {
+      setIsCheckingEligibility(false)
+      setIsApproved(true)
+      setIsSubmitting(false)
+    }, 1800)
   }
 
   const handleSelectLoan = (amount: number) => {
-    setSelectedLoanAmount(amount)
+    dispatch(setSelectedLoanAmount(amount))
     setShowConfirmation(true)
     setIsApproved(false)
   }
 
   const handleBackToForm = () => {
+    dispatch(resetLoanForm())
     setIsApproved(false)
     setShowConfirmation(false)
     setIsSubmitting(false)
-    setSelectedLoanAmount(null)
-    setFormData({
-      fullName: '',
-      phoneNumber: '',
-      nationalId: '',
-      loanType: '',
-    })
   }
 
   const handleBackToOffers = () => {
     setShowConfirmation(false)
     setIsApproved(true)
-    setSelectedLoanAmount(null)
   }
 
-  const handleApplyLoan = () => {
-    // Loan application submitted
-    alert(`Loan of KSh ${selectedLoanAmount?.toLocaleString()} approved!`)
+  const handleApplyLoan = async () => {
+    if (!selectedLoanAmount) {
+      alert('Please select a loan amount before proceeding.')
+      return
+    }
+
+    const { fee, rate, termDays } = getFeeAndRate(selectedLoanAmount)
+
+    // Build envelope and send to event gateway for asynchronous processing / audit
+    try {
+      const envelope = buildEnvelope('loan.application.requested', {
+        loan_amount: selectedLoanAmount,
+        loan_type: loanType,
+        applicant_name: applicantName,
+        phone_number: phoneNumber,
+        national_id: nationalId,
+        ui_ref: 'apply-page/confirm-button',
+      })
+
+      // Fire-and-forget the gateway publishing, but await response to confirm acceptance
+      try {
+        const res = await fetch('/api/events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(envelope),
+        })
+
+        if (!res.ok) {
+          console.warn('Event gateway rejected envelope', await res.text())
+        }
+      } catch (e) {
+        console.warn('Failed to send event to gateway', e)
+      }
+
+      // Navigate to /pay-warning with all details
+      const params = new URLSearchParams({
+        amount: selectedLoanAmount.toString(),
+        rate: rate.toString(),
+        termDays: termDays.toString(),
+        fee: fee.toString(),
+        name: applicantName,
+        phone: phoneNumber,
+        loanType: loanType,
+        nationalId: nationalId,
+      })
+
+      setShowConfirmation(false)
+      setIsApproved(false)
+      router.push(`/pay-warning?${params.toString()}`)
+    } catch (err) {
+      console.error(err)
+      alert('An error occurred while preparing your request.')
+    }
   }
 
-  // Show loader
-  if (isLoading) {
-    return <Loader onComplete={handleLoaderComplete} />
+  const firstName = applicantName.split(' ')[0] || ''
+
+  if (isProcessingPayment) {
+    return <ProcessingPage mode="payment" amount={selectedLoanAmount ?? 0} phoneNumber={phoneNumber} />
+  }
+
+  if (isCheckingEligibility) {
+    return <ProcessingPage mode="eligibility" />
   }
 
   // Show loan confirmation
   if (showConfirmation && selectedLoanAmount) {
     return (
       <LoanConfirmationPage
-        userName={userName}
+        userName={firstName}
         loanAmount={selectedLoanAmount}
-        phoneNumber={formData.phoneNumber}
+        phoneNumber={phoneNumber}
         onBack={handleBackToOffers}
         onApply={handleApplyLoan}
       />
@@ -99,8 +164,8 @@ export default function ApplyPage() {
   if (isApproved) {
     return (
       <LoanSelectionPage
-        userName={userName}
-        phoneNumber={formData.phoneNumber}
+        userName={firstName}
+        phoneNumber={phoneNumber}
         onBack={handleBackToForm}
         onSelectLoan={handleSelectLoan}
       />
@@ -157,7 +222,7 @@ export default function ApplyPage() {
                 type="text"
                 id="fullName"
                 name="fullName"
-                value={formData.fullName}
+                value={applicantName}
                 onChange={handleChange}
                 placeholder="Enter your full name as on your national ID"
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a3c6e] focus:border-transparent outline-none transition"
@@ -174,7 +239,7 @@ export default function ApplyPage() {
                 type="tel"
                 id="phoneNumber"
                 name="phoneNumber"
-                value={formData.phoneNumber}
+                value={phoneNumber}
                 onChange={handleChange}
                 placeholder="Safaricom only—e.g. 0712 345 678 or 0110 123 456"
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a3c6e] focus:border-transparent outline-none transition"
@@ -192,7 +257,7 @@ export default function ApplyPage() {
                 type="text"
                 id="nationalId"
                 name="nationalId"
-                value={formData.nationalId}
+                value={nationalId}
                 onChange={handleChange}
                 placeholder="7 to 9 digit Kenyan National ID number"
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a3c6e] focus:border-transparent outline-none transition"
@@ -210,7 +275,7 @@ export default function ApplyPage() {
               <select
                 id="loanType"
                 name="loanType"
-                value={formData.loanType}
+                value={loanType}
                 onChange={handleChange}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a3c6e] focus:border-transparent outline-none transition bg-white"
                 required

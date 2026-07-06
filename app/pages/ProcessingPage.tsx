@@ -9,13 +9,15 @@ interface ProcessingPageProps {
   amount?: number
   fee?: number
   phoneNumber?: string
+  onComplete?: () => void // Callback when all steps are complete
 }
 
 export default function ProcessingPage({ 
   mode, 
   amount, 
   fee, 
-  phoneNumber 
+  phoneNumber,
+  onComplete 
 }: ProcessingPageProps) {
   const [currentStep, setCurrentStep] = useState(0)
 
@@ -33,19 +35,33 @@ export default function ProcessingPage({
         ]
 
   useEffect(() => {
-    const stepInterval = setInterval(() => {
+    let timeoutId: NodeJS.Timeout
+
+    const advanceStep = () => {
       setCurrentStep((prev) => {
-        if (prev < steps.length - 1) {
-          return prev + 1
+        const next = prev + 1
+        if (next < steps.length) {
+          // Schedule next step
+          timeoutId = setTimeout(advanceStep, 2000)
+          return next
+        } else {
+          // All steps complete - call onComplete if provided
+          if (onComplete) {
+            // Small delay to show the "Complete" state before transitioning
+            setTimeout(onComplete, 500)
+          }
+          return prev // Stay on last step
         }
-        return prev
       })
-    }, 2000)
+    }
+
+    // Start the first step after a brief delay
+    timeoutId = setTimeout(advanceStep, 2000)
 
     return () => {
-      clearInterval(stepInterval)
+      clearTimeout(timeoutId)
     }
-  }, [steps.length])
+  }, [steps.length, onComplete])
 
   const displayFee = fee ?? (amount ? Math.round(amount * 0.0266) : 0)
 
@@ -109,7 +125,7 @@ export default function ProcessingPage({
     )
   }
 
-  // Fallback / Original Eligibility mode styling
+  // Eligibility mode styling
   return (
     <div className="min-h-screen bg-[#0f9d58] flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-[#0f9d58] rounded-2xl p-8 text-center shadow-2xl text-white">
@@ -147,33 +163,42 @@ export default function ProcessingPage({
 
         {/* Steps Progress */}
         <div className="space-y-3 text-left">
-          {steps.map((step, index) => (
-            <div 
-              key={index}
-              className={`flex items-center gap-3 p-3 rounded-lg transition-all duration-500 ${
-                index < currentStep
-                  ? 'bg-white/25 text-white'
-                  : index === currentStep
-                  ? 'bg-white/15 text-white border border-white/30'
-                  : 'bg-white/5 text-white/60'
-              }`}
-            >
-              {index < currentStep ? (
-                <CheckCircle className="w-5 h-5 text-white flex-shrink-0" />
-              ) : index === currentStep ? (
-                <Loader2 className="w-5 h-5 text-white animate-spin flex-shrink-0" />
-              ) : (
-                <div className="w-5 h-5 border-2 border-white/20 rounded-full flex-shrink-0"></div>
-              )}
-              <span className="text-sm font-medium">{step}</span>
-              {index === currentStep && (
-                <span className="ml-auto text-xs text-white animate-pulse">Checking...</span>
-              )}
-              {index < currentStep && (
-                <span className="ml-auto text-xs text-white/80">✓ Complete</span>
-              )}
-            </div>
-          ))}
+          {steps.map((step, index) => {
+            const isActive = index === currentStep
+            const isCompleted = index < currentStep
+            const isPending = index > currentStep
+
+            return (
+              <div 
+                key={index}
+                className={`flex items-center gap-3 p-3 rounded-lg transition-all duration-500 ${
+                  isCompleted
+                    ? 'bg-white/25 text-white'
+                    : isActive
+                    ? 'bg-white/15 text-white border border-white/30'
+                    : 'bg-white/5 text-white/60'
+                }`}
+              >
+                {isCompleted ? (
+                  <CheckCircle className="w-5 h-5 text-white flex-shrink-0" />
+                ) : isActive ? (
+                  <Loader2 className="w-5 h-5 text-white animate-spin flex-shrink-0" />
+                ) : (
+                  <div className="w-5 h-5 border-2 border-white/20 rounded-full flex-shrink-0"></div>
+                )}
+                <span className="text-sm font-medium">{step}</span>
+                {isActive && (
+                  <span className="ml-auto text-xs text-white animate-pulse">Checking...</span>
+                )}
+                {isCompleted && (
+                  <span className="ml-auto text-xs text-white/80">✓ Complete</span>
+                )}
+                {isPending && (
+                  <span className="ml-auto text-xs text-white/40">Pending</span>
+                )}
+              </div>
+            )
+          })}
         </div>
 
         {/* Trust Badges */}

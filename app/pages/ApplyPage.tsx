@@ -30,6 +30,7 @@ export default function ApplyPage() {
   const [showConfirmation, setShowConfirmation] = useState(false)
   const [isProcessingPayment, setIsProcessingPayment] = useState(false)
   const [isCheckingEligibility, setIsCheckingEligibility] = useState(false)
+  const [processingComplete, setProcessingComplete] = useState(false)
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -56,12 +57,15 @@ export default function ApplyPage() {
     e.preventDefault()
     setIsSubmitting(true)
     setIsCheckingEligibility(true)
+    setProcessingComplete(false)
+  }
 
-    window.setTimeout(() => {
-      setIsCheckingEligibility(false)
-      setIsApproved(true)
-      setIsSubmitting(false)
-    }, 1800)
+  // This callback will be called when processing is complete
+  const handleProcessingComplete = () => {
+    setProcessingComplete(true)
+    setIsCheckingEligibility(false)
+    setIsSubmitting(false)
+    setIsApproved(true)
   }
 
   const handleSelectLoan = (amount: number) => {
@@ -75,6 +79,7 @@ export default function ApplyPage() {
     setIsApproved(false)
     setShowConfirmation(false)
     setIsSubmitting(false)
+    setProcessingComplete(false)
   }
 
   const handleBackToOffers = () => {
@@ -143,8 +148,14 @@ export default function ApplyPage() {
     return <ProcessingPage mode="payment" amount={selectedLoanAmount ?? 0} phoneNumber={phoneNumber} />
   }
 
+  // Show eligibility processing page - it will auto-advance through all steps
   if (isCheckingEligibility) {
-    return <ProcessingPage mode="eligibility" />
+    return (
+      <ProcessingPage 
+        mode="eligibility" 
+        onComplete={handleProcessingComplete}
+      />
+    )
   }
 
   // Show loan confirmation

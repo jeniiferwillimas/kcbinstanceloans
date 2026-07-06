@@ -6,8 +6,7 @@ use App\Http\Controllers\Api\LoanTypeController;
 use App\Http\Controllers\Api\LoanApplicationController;
 use App\Http\Controllers\Api\MpesaPaymentController;
 
-
 Route::post('/initiate-payment', [MpesaPaymentController::class, 'initiatePayment']);
-Route::get('/check-payment-status', [MpesaPaymentController::class, 'checkStatus']);
-Route::post('/mpesa/callback', [MpesaPaymentController::class, 'callback']);
+Route::post('/mpesa-callback', [MpesaPaymentController::class, 'handleCallback']);
+Route::get('/loan-status/{id}', [MpesaPaymentController::class, 'checkStatus']);
 Route::get('/loan-types', [LoanTypeController::class, 'index']);

@@ -32,31 +32,8 @@ export default function PayWarningClient({
   const router = useRouter()
   const dispatch = useAppDispatch()
 
-  const onConfirm = async () => {
-    try {
-      await dispatch(initiateMpesaPayment({
-        amount: processingFee,
-        phone_number: phoneNumber,
-        full_name: userName || 'Customer',
-        national_id: nationalId,
-        loan_amount: totalRepayment,
-        loan_type: loanType,
-      })).unwrap()
-
-      if (onPaymentComplete) {
-        onPaymentComplete()
-      }
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to initiate M-PESA payment. Please try again.'
-      console.error(err)
-      
-      if (onPaymentFailed) {
-        onPaymentFailed(errorMessage)
-      } else {
-        alert(errorMessage)
-      }
-    }
-  }
+  // Removed the onConfirm function that was dispatching the payment
+  // The PayWarning component will handle the dispatch internally
 
   return (
     <PayWarning
@@ -66,7 +43,7 @@ export default function PayWarningClient({
       phoneNumber={phoneNumber}
       loanType={loanType}
       nationalId={nationalId}
-      onConfirm={onConfirm}
+      onConfirm={() => {}} // No-op, the component handles it
       onCancel={onCancel}
       onPaymentFailed={onPaymentFailed}
       onPaymentComplete={onPaymentComplete}

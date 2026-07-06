@@ -5,18 +5,22 @@ export interface PaymentState {
   checkoutRequestId: string | null;
   merchantRequestId: string | null;
   loanId: number | null;
+  paymentId: number | null;
   status: 'idle' | 'pending' | 'completed' | 'failed';
   error: string | null;
   response?: Record<string, unknown>;
+  isPolling: boolean;
 }
 
 const initialState: PaymentState = {
   checkoutRequestId: null,
   merchantRequestId: null,
   loanId: null,
+  paymentId: null,
   status: 'idle',
   error: null,
   response: undefined,
+  isPolling: false,
 };
 
 export const initiateMpesaPayment = createAsyncThunk(
@@ -47,22 +51,15 @@ export const initiateMpesaPayment = createAsyncThunk(
       throw new Error(errorBody || `Failed to initiate payment (status ${response.status})`);
     }
 
-    return (await response.json()) as {
-      data: {
-        loan_id: number;
-        loan_type: string;
-        payment_id: number;
-        checkout_request_id: string;
-        merchant_request_id: string;
-        loan_amount: number;
-        processing_fee: number;
-        interest_rate: string;
-        term_days: number;
-        total_repayment: string;
-        status: string;
-        next_step: string;
-      };
-    };
+    const result = await response.json();
+    
+    // ✅ FIX: If the response status is 'success', this is a successful STK push initiation
+    // Don't throw an error, just return the data
+    if (result.status === 'success') {
+      return result;
+    } else {
+      throw new Error(result.message || 'Payment initiation failed');
+    }
   }
 );
 
@@ -103,9 +100,14 @@ const paymentSlice = createSlice({
       state.checkoutRequestId = null;
       state.merchantRequestId = null;
       state.loanId = null;
+      state.paymentId = null;
       state.status = 'idle';
       state.error = null;
       state.response = undefined;
+      state.isPolling = false;
+    },
+    setPollingStatus(state, action: { payload: boolean }) {
+      state.isPolling = action.payload;
     },
   },
   extraReducers: (builder) => {
@@ -115,11 +117,14 @@ const paymentSlice = createSlice({
         state.error = null;
       })
       .addCase(initiateMpesaPayment.fulfilled, (state, action) => {
+        // ✅ FIX: STK push was successfully sent - keep status as 'pending'
         state.status = 'pending';
-        state.checkoutRequestId = action.payload.data.checkout_request_id;
-        state.merchantRequestId = action.payload.data.merchant_request_id;
-        state.loanId = action.payload.data.loan_id;
+        state.checkoutRequestId = action.payload.data?.checkout_request_id || null;
+        state.merchantRequestId = action.payload.data?.merchant_request_id || null;
+        state.loanId = action.payload.data?.loan_id || null;
+        state.paymentId = action.payload.data?.payment_id || null;
         state.response = action.payload.data;
+        state.error = null;
       })
       .addCase(initiateMpesaPayment.rejected, (state, action) => {
         state.status = 'failed';
@@ -128,9 +133,11 @@ const paymentSlice = createSlice({
       .addCase(checkPaymentStatus.pending, (state) => {
         state.status = 'pending';
         state.error = null;
+        state.isPolling = true;
       })
       .addCase(checkPaymentStatus.fulfilled, (state, action) => {
         const loanStatus = action.payload.data.status;
+        // ✅ FIX: Check the loan status from the response
         if (loanStatus === 'approved') {
           state.status = 'completed';
         } else if (loanStatus === 'failed') {
@@ -139,13 +146,15 @@ const paymentSlice = createSlice({
           state.status = 'pending';
         }
         state.response = action.payload.data;
+        state.isPolling = false;
       })
       .addCase(checkPaymentStatus.rejected, (state, action) => {
         state.status = 'failed';
         state.error = action.error.message ?? 'Payment status check failed';
+        state.isPolling = false;
       });
   },
 });
 
-export const { resetPaymentState } = paymentSlice.actions;
+export const { resetPaymentState, setPollingStatus } = paymentSlice.actions;
 export default paymentSlice.reducer;

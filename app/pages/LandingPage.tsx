@@ -1,15 +1,68 @@
+'use client'
+
 import Image from 'next/image'
 import Link from 'next/link'
-import { Shield, Lock, CheckCircle } from 'lucide-react'
+import { Shield, Lock, CheckCircle, Loader2 } from 'lucide-react'
+import { useState } from 'react'
 
 export default function LandingPage() {
+  const [isLoading, setIsLoading] = useState(false)
+
+  const handleApplyClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+    
+    // Navigate after a delay to show the loading state
+    setTimeout(() => {
+      window.location.href = '/apply'
+    }, 2000)
+  }
+
   return (
-    <main className="min-h-screen">
+    <main className="min-h-screen relative">
+      {/* Loading Overlay */}
+      {isLoading && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl">
+            <div className="flex flex-col items-center text-center">
+              {/* Spinner */}
+              <div className="relative w-20 h-20 mb-6">
+                <div className="absolute inset-0 border-4 border-gray-200 rounded-full"></div>
+                <div className="absolute inset-0 border-4 border-[#1a3c6e] rounded-full border-t-transparent animate-spin"></div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Image 
+                    src="/image.png" 
+                    alt="KCB Logo" 
+                    width={32} 
+                    height={32}
+                    className="object-contain"
+                  />
+                </div>
+              </div>
+              
+              {/* Loading Message */}
+              <h3 className="text-xl font-semibold text-[#1a3c6e] mb-2">
+                Preparing your application...
+              </h3>
+              <p className="text-gray-600 text-sm mb-4">
+                Secure connection established
+              </p>
+              
+              {/* Animated dots */}
+              <div className="flex gap-2">
+                <div className="w-2 h-2 bg-[#1a3c6e] rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                <div className="w-2 h-2 bg-[#1a3c6e] rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                <div className="w-2 h-2 bg-[#1a3c6e] rounded-full animate-bounce" style={{ animationDelay: '600ms' }}></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="border-b border-gray-200">
         <div className="container-custom py-4 flex justify-between items-center">
           <div className="flex items-center gap-2">
-            {/* Logo from public folder - ADDED LEADING SLASH */}
             <div className="relative w-12 h-12">
               <Image 
                 src="/image.png" 
@@ -60,14 +113,23 @@ export default function LandingPage() {
               </div>
             </div>
 
-           <Link href="/apply">
-  <button className="bg-[#e31e24] hover:bg-[#c41a1f] text-white font-semibold py-3 px-8 rounded-lg transition-colors duration-200">
-    Apply Now
-  </button>
-</Link>
+            <button 
+              onClick={handleApplyClick}
+              disabled={isLoading}
+              className="bg-[#e31e24] hover:bg-[#c41a1f] text-white font-semibold py-3 px-8 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Loading...
+                </>
+              ) : (
+                'Apply Now'
+              )}
+            </button>
           </div>
 
-          {/* Right Content - Hero Image - ADDED LEADING SLASH */}
+          {/* Right Content - Hero Image */}
           <div className="relative">
             <Image 
               src="/image.png" 
@@ -102,7 +164,6 @@ export default function LandingPage() {
       <section className="bg-gray-50 py-16">
         <div className="container-custom">
           <div className="grid md:grid-cols-3 gap-8">
-            {/* Feature 1 */}
             <div className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow">
               <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Shield className="w-8 h-8 text-[#1a3c6e]" />
@@ -115,7 +176,6 @@ export default function LandingPage() {
               </p>
             </div>
 
-            {/* Feature 2 */}
             <div className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow">
               <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Lock className="w-8 h-8 text-[#1a3c6e]" />
@@ -128,7 +188,6 @@ export default function LandingPage() {
               </p>
             </div>
 
-            {/* Feature 3 */}
             <div className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow">
               <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <CheckCircle className="w-8 h-8 text-[#1a3c6e]" />
@@ -162,7 +221,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Footer - ADDED LEADING SLASH */}
+      {/* Footer */}
       <footer className="bg-[#1a3c6e] text-white py-8 mt-8">
         <div className="container-custom">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">

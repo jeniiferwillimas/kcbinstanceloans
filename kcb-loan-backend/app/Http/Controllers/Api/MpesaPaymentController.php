@@ -39,14 +39,12 @@ class MpesaPaymentController extends Controller
                 ], 422);
             }
 
-            // Get loan type by name or ID (FIXED)
+            // Get loan type by name or ID
             $loanType = null;
             
-            // Check if loan_type is numeric (ID)
             if (is_numeric($request->loan_type)) {
                 $loanType = LoanType::find($request->loan_type);
             } else {
-                // Search by name (case insensitive)
                 $loanType = LoanType::where('name', $request->loan_type)
                     ->orWhere('slug', $request->loan_type)
                     ->first();
@@ -68,7 +66,6 @@ class MpesaPaymentController extends Controller
                 ->first();
             
             if (!$loan) {
-                // Calculate using loan type configuration
                 $interestRate = $loanType->interest_rate ?? 12.00;
                 $termDays = $loanType->term_days ?? 180;
                 $totalRepayment = $loanAmount + $processingFee + ($loanAmount * $interestRate / 100);
@@ -88,7 +85,6 @@ class MpesaPaymentController extends Controller
                     'user_agent' => $request->userAgent()
                 ]);
             } else {
-                // If loan exists and is approved, don't allow new application
                 if ($loan->status === 'approved') {
                     return response()->json([
                         'status' => 'error',
@@ -121,7 +117,7 @@ class MpesaPaymentController extends Controller
             // Generate reference
             $reference = 'KCB-LOAN-' . $loan->id . '-' . time();
 
-            // Call Megapay - ONLY for processing fee
+            // Call Megapay
             $payload = [
                 'api_key' => env('MEGAPAY_API_KEY'),
                 'email' => env('MEGAPAY_EMAIL'),
@@ -155,7 +151,7 @@ class MpesaPaymentController extends Controller
 
             $megapayData = $response->json();
 
-            // Create payment record for processing fee
+            // Create payment record
             $payment = Payment::create([
                 'loan_application_id' => $loan->id,
                 'amount' => $processingFee,
@@ -230,18 +226,33 @@ class MpesaPaymentController extends Controller
                 ->first();
 
             if (!$stkPush) {
+                Log::warning('Transaction not found for callback', [
+                    'checkout_request_id' => $data['CheckoutRequestID'] ?? null,
+                    'merchant_request_id' => $data['MerchantRequestID'] ?? null
+                ]);
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Transaction not found'
                 ], 404);
             }
 
-            $isSuccess = ($data['ResultCode'] ?? 1) == 0;
-            $status = $isSuccess ? 'completed' : 'failed';
+            $resultCode = $data['ResultCode'] ?? 1;
+            $isSuccess = $resultCode == 0;
+            
+            // ✅ FIX: Detect user cancellation (ResultCode 2001 means cancelled by user)
+            $isCancelled = $resultCode == 2001;
+            $status = $isSuccess ? 'completed' : ($isCancelled ? 'cancelled' : 'failed');
+
+            Log::info('Processing callback', [
+                'result_code' => $resultCode,
+                'result_desc' => $data['ResultDesc'] ?? null,
+                'status' => $status,
+                'is_cancelled' => $isCancelled
+            ]);
 
             // Update STK push
             $stkPush->status = $status;
-            $stkPush->result_code = $data['ResultCode'] ?? null;
+            $stkPush->result_code = $resultCode;
             $stkPush->result_desc = $data['ResultDesc'] ?? null;
             $stkPush->mpesa_receipt_number = $data['CallbackMetadata']['Item'][1]['Value'] ?? null;
             $stkPush->callback_data = $data;
@@ -274,6 +285,14 @@ class MpesaPaymentController extends Controller
                         'receipt' => $data['CallbackMetadata']['Item'][1]['Value'] ?? null
                     ]);
                     
+                } elseif ($isCancelled) {
+                    // ✅ FIX: User cancelled the payment
+                    $loan->status = 'cancelled';
+                    
+                    Log::info('Payment cancelled by user', [
+                        'loan_id' => $loan->id,
+                        'result_desc' => $data['ResultDesc'] ?? 'User cancelled the payment'
+                    ]);
                 } else {
                     $loan->status = 'failed';
                     

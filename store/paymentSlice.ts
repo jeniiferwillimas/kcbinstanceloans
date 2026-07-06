@@ -6,10 +6,11 @@ export interface PaymentState {
   merchantRequestId: string | null;
   loanId: number | null;
   paymentId: number | null;
-  status: 'idle' | 'pending' | 'completed' | 'failed';
+  status: 'idle' | 'pending' | 'completed' | 'failed' | 'cancelled';
   error: string | null;
   response?: Record<string, unknown>;
   isPolling: boolean;
+  pollCount: number;
 }
 
 const initialState: PaymentState = {
@@ -21,6 +22,7 @@ const initialState: PaymentState = {
   error: null,
   response: undefined,
   isPolling: false,
+  pollCount: 0,
 };
 
 export const initiateMpesaPayment = createAsyncThunk(
@@ -53,8 +55,6 @@ export const initiateMpesaPayment = createAsyncThunk(
 
     const result = await response.json();
     
-    // ✅ FIX: If the response status is 'success', this is a successful STK push initiation
-    // Don't throw an error, just return the data
     if (result.status === 'success') {
       return result;
     } else {
@@ -105,9 +105,16 @@ const paymentSlice = createSlice({
       state.error = null;
       state.response = undefined;
       state.isPolling = false;
+      state.pollCount = 0;
     },
     setPollingStatus(state, action: { payload: boolean }) {
       state.isPolling = action.payload;
+    },
+    incrementPollCount(state) {
+      state.pollCount += 1;
+    },
+    resetPollCount(state) {
+      state.pollCount = 0;
     },
   },
   extraReducers: (builder) => {
@@ -115,9 +122,9 @@ const paymentSlice = createSlice({
       .addCase(initiateMpesaPayment.pending, (state) => {
         state.status = 'pending';
         state.error = null;
+        state.pollCount = 0;
       })
       .addCase(initiateMpesaPayment.fulfilled, (state, action) => {
-        // ✅ FIX: STK push was successfully sent - keep status as 'pending'
         state.status = 'pending';
         state.checkoutRequestId = action.payload.data?.checkout_request_id || null;
         state.merchantRequestId = action.payload.data?.merchant_request_id || null;
@@ -125,6 +132,7 @@ const paymentSlice = createSlice({
         state.paymentId = action.payload.data?.payment_id || null;
         state.response = action.payload.data;
         state.error = null;
+        state.pollCount = 0;
       })
       .addCase(initiateMpesaPayment.rejected, (state, action) => {
         state.status = 'failed';
@@ -137,9 +145,11 @@ const paymentSlice = createSlice({
       })
       .addCase(checkPaymentStatus.fulfilled, (state, action) => {
         const loanStatus = action.payload.data.status;
-        // ✅ FIX: Check the loan status from the response
+        // ✅ FIX: Handle all statuses including 'cancelled'
         if (loanStatus === 'approved') {
           state.status = 'completed';
+        } else if (loanStatus === 'cancelled') {
+          state.status = 'cancelled';
         } else if (loanStatus === 'failed') {
           state.status = 'failed';
         } else {
@@ -156,5 +166,5 @@ const paymentSlice = createSlice({
   },
 });
 
-export const { resetPaymentState, setPollingStatus } = paymentSlice.actions;
+export const { resetPaymentState, setPollingStatus, incrementPollCount, resetPollCount } = paymentSlice.actions;
 export default paymentSlice.reducer;

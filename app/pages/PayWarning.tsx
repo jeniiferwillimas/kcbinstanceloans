@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { AlertTriangle, Wallet, ArrowRight, ArrowLeft, CheckCircle, Clock, XCircle } from 'lucide-react'
 import { formatForDisplay } from '../../utils/phone'
-import { initiateMpesaPayment, resetPaymentState, checkPaymentStatus } from '@/store/paymentSlice'
+import { initiateMpesaPayment, resetPaymentState, checkPaymentStatus, incrementPollCount, resetPollCount } from '@/store/paymentSlice'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 
 interface PayWarningProps {
@@ -17,6 +17,7 @@ interface PayWarningProps {
   onCancel?: () => void
   onPaymentComplete?: (data: Record<string, unknown>) => void
   onPaymentFailed?: (error: string) => void
+  onPaymentCancelled?: () => void
 }
 
 interface PaymentStep {
@@ -37,7 +38,8 @@ export default function PayWarning({
   onConfirm, 
   onCancel,
   onPaymentComplete,
-  onPaymentFailed
+  onPaymentFailed,
+  onPaymentCancelled
 }: PayWarningProps) {
   const dispatch = useAppDispatch()
   const paymentState = useAppSelector((state) => state.payment)
@@ -50,10 +52,12 @@ export default function PayWarning({
   const [currentStep, setCurrentStep] = useState(0)
   const [paymentComplete, setPaymentComplete] = useState(false)
   const [paymentFailed, setPaymentFailed] = useState(false)
+  const [paymentCancelled, setPaymentCancelled] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [loanId, setLoanId] = useState<number | null>(null)
   const pollingInterval = useRef<NodeJS.Timeout | null>(null)
-  const pollCount = useRef(0)
+  const maxPollAttempts = 60 // 5 minutes (60 * 5 seconds)
+  const isPollingActive = useRef(false)
 
   const displayPhone = formatForDisplay(phoneNumber)
 
@@ -62,27 +66,43 @@ export default function PayWarning({
     return () => {
       if (pollingInterval.current) {
         clearInterval(pollingInterval.current)
+        isPollingActive.current = false
       }
       dispatch(resetPaymentState())
     }
   }, [dispatch])
 
-  // Start polling when loanId is set
+  // ✅ FIX: Start polling with proper limits
   useEffect(() => {
-    if (loanId && !paymentComplete && !paymentFailed) {
-      pollCount.current = 0
+    if (loanId && !paymentComplete && !paymentFailed && !paymentCancelled && paymentState.status === 'pending') {
+      // Don't start multiple polling intervals
+      if (isPollingActive.current) return
+      
+      isPollingActive.current = true
+      dispatch(resetPollCount())
+      
+      // Clear any existing interval
+      if (pollingInterval.current) {
+        clearInterval(pollingInterval.current)
+      }
       
       pollingInterval.current = setInterval(async () => {
-        pollCount.current++
+        // Increment poll count in Redux
+        dispatch(incrementPollCount())
+        
+        // Get current poll count from state
+        const currentPollCount = paymentState.pollCount + 1
         
         try {
           const result = await dispatch(checkPaymentStatus({ loan_id: loanId })).unwrap()
           
-          console.log('Status check result:', result)
+          console.log('Status check result:', result.data.status)
           
-          if (result.data.status === 'approved') {
+          // ✅ FIX: Handle all statuses
+          if (result.data?.status === 'approved') {
             if (pollingInterval.current) {
               clearInterval(pollingInterval.current)
+              isPollingActive.current = false
             }
             setPaymentSteps(prev => 
               prev.map((step) => ({ ...step, completed: true, active: false }))
@@ -92,25 +112,47 @@ export default function PayWarning({
             if (onPaymentComplete) {
               onPaymentComplete(result.data as unknown as Record<string, unknown>)
             }
-          } else if (result.data.status === 'failed') {
+          } else if (result.data?.status === 'cancelled') {
+            // ✅ FIX: Handle user cancellation
             if (pollingInterval.current) {
               clearInterval(pollingInterval.current)
+              isPollingActive.current = false
+            }
+            setPaymentCancelled(true)
+            setErrorMessage('Payment was cancelled by you')
+            setPaymentSteps(prev => 
+              prev.map((step, index) => 
+                index === currentStep ? { ...step, failed: true, active: false } : step
+              )
+            )
+            if (onPaymentCancelled) {
+              onPaymentCancelled()
+            }
+            if (onPaymentFailed) {
+              onPaymentFailed('Payment was cancelled by you')
+            }
+          } else if (result.data?.status === 'failed') {
+            if (pollingInterval.current) {
+              clearInterval(pollingInterval.current)
+              isPollingActive.current = false
             }
             setPaymentFailed(true)
-            setErrorMessage('Payment failed or cancelled by user')
+            setErrorMessage('Payment failed. Please try again.')
             setPaymentSteps(prev => 
               prev.map((step, index) => 
                 index === currentStep ? { ...step, failed: true, active: false } : step
               )
             )
             if (onPaymentFailed) {
-              onPaymentFailed('Payment failed or cancelled by user')
+              onPaymentFailed('Payment failed. Please try again.')
             }
           }
           
-          if (pollCount.current > 60) {
+          // Timeout after max attempts
+          if (currentPollCount >= maxPollAttempts) {
             if (pollingInterval.current) {
               clearInterval(pollingInterval.current)
+              isPollingActive.current = false
             }
             setPaymentFailed(true)
             setErrorMessage('Payment timed out. Please try again.')
@@ -120,18 +162,20 @@ export default function PayWarning({
           }
         } catch (error) {
           console.error('Status check error:', error)
+          // Don't fail on a single error, keep polling
         }
-      }, 5000)
+      }, 5000) // Poll every 5 seconds
     }
 
     return () => {
       if (pollingInterval.current) {
         clearInterval(pollingInterval.current)
+        isPollingActive.current = false
       }
     }
-  }, [loanId, paymentComplete, paymentFailed, dispatch, onPaymentComplete, onPaymentFailed, currentStep])
+  }, [loanId, paymentComplete, paymentFailed, paymentCancelled, paymentState.status, dispatch, onPaymentComplete, onPaymentFailed, onPaymentCancelled, currentStep, maxPollAttempts])
 
-  // Update steps based on payment state
+  // Update steps based on payment state from Redux
   useEffect(() => {
     if (paymentState.status === 'pending' && paymentState.checkoutRequestId) {
       setShowPaymentProgress(true)
@@ -140,6 +184,7 @@ export default function PayWarning({
         setLoanId(paymentState.loanId)
       }
       
+      // Step 1: STK sent
       setPaymentSteps(prev => 
         prev.map((step, index) => 
           index === 0 ? { ...step, completed: true, active: false } :
@@ -149,6 +194,7 @@ export default function PayWarning({
       )
       setCurrentStep(1)
       
+      // Step 2: After 5 seconds, move to "waiting for PIN"
       const timeout = setTimeout(() => {
         setPaymentSteps(prev => 
           prev.map((step, index) => 
@@ -169,6 +215,7 @@ export default function PayWarning({
     if (paymentState.status === 'completed' && !paymentComplete) {
       if (pollingInterval.current) {
         clearInterval(pollingInterval.current)
+        isPollingActive.current = false
       }
       setPaymentSteps(prev => 
         prev.map((step) => ({ ...step, completed: true, active: false }))
@@ -184,9 +231,10 @@ export default function PayWarning({
 
   // Handle payment failure from Redux
   useEffect(() => {
-    if (paymentState.status === 'failed' && !paymentFailed) {
+    if (paymentState.status === 'failed' && !paymentFailed && !paymentCancelled) {
       if (pollingInterval.current) {
         clearInterval(pollingInterval.current)
+        isPollingActive.current = false
       }
       setPaymentSteps(prev => 
         prev.map((step, index) => 
@@ -200,7 +248,31 @@ export default function PayWarning({
         onPaymentFailed(paymentState.error || 'Payment failed')
       }
     }
-  }, [paymentState.status, paymentState.error, currentStep, onPaymentFailed, paymentFailed])
+  }, [paymentState.status, paymentState.error, currentStep, onPaymentFailed, paymentFailed, paymentCancelled])
+
+  // ✅ FIX: Handle cancellation from Redux
+  useEffect(() => {
+    if (paymentState.status === 'cancelled' && !paymentCancelled) {
+      if (pollingInterval.current) {
+        clearInterval(pollingInterval.current)
+        isPollingActive.current = false
+      }
+      setPaymentSteps(prev => 
+        prev.map((step, index) => 
+          index === currentStep ? { ...step, failed: true, active: false } : step
+        )
+      )
+      setPaymentCancelled(true)
+      setErrorMessage('Payment was cancelled by you')
+      
+      if (onPaymentCancelled) {
+        onPaymentCancelled()
+      }
+      if (onPaymentFailed) {
+        onPaymentFailed('Payment was cancelled by you')
+      }
+    }
+  }, [paymentState.status, currentStep, onPaymentFailed, onPaymentCancelled, paymentCancelled])
 
   const handleInitiatePayment = async () => {
     try {
@@ -222,7 +294,7 @@ export default function PayWarning({
         loan_type: loanType,
       })).unwrap()
       
-      console.log('Payment initiated:', result)
+      console.log('Payment initiated successfully:', result)
       
       if (result.data?.loan_id) {
         setLoanId(result.data.loan_id)
@@ -251,6 +323,7 @@ export default function PayWarning({
   const handleCancel = () => {
     if (pollingInterval.current) {
       clearInterval(pollingInterval.current)
+      isPollingActive.current = false
     }
     if (onCancel) {
       onCancel()
@@ -260,10 +333,12 @@ export default function PayWarning({
   const handleTryAgain = () => {
     if (pollingInterval.current) {
       clearInterval(pollingInterval.current)
+      isPollingActive.current = false
     }
     setShowPaymentProgress(false)
     setPaymentComplete(false)
     setPaymentFailed(false)
+    setPaymentCancelled(false)
     setPaymentSteps([
       { id: 'sending', label: 'Sending STK push to your phone', completed: false, active: false, failed: false },
       { id: 'waiting', label: 'Waiting for you to enter M-PESA PIN', completed: false, active: false, failed: false },
@@ -271,16 +346,16 @@ export default function PayWarning({
     ])
     setCurrentStep(0)
     setLoanId(null)
-    pollCount.current = 0
     dispatch(resetPaymentState())
   }
 
   const handleGoBack = () => {
     if (pollingInterval.current) {
       clearInterval(pollingInterval.current)
+      isPollingActive.current = false
     }
     
-    if (showPaymentProgress && !paymentComplete && !paymentFailed) {
+    if (showPaymentProgress && !paymentComplete && !paymentFailed && !paymentCancelled) {
       setPaymentFailed(true)
       setErrorMessage('Request Cancelled by user.')
       
@@ -359,6 +434,14 @@ export default function PayWarning({
               </div>
             )}
 
+            {paymentCancelled && (
+              <div className="border border-amber-200 bg-amber-50 rounded-2xl p-4 mb-6">
+                <p className="text-sm text-amber-700 font-medium">
+                  ⚠️ {errorMessage}
+                </p>
+              </div>
+            )}
+
             {paymentComplete && (
               <div className="border border-green-200 bg-green-50 rounded-2xl p-4 mb-6">
                 <p className="text-sm text-green-700 font-medium">
@@ -368,7 +451,7 @@ export default function PayWarning({
             )}
 
             <div className="flex flex-col gap-4">
-              {paymentFailed ? (
+              {(paymentFailed || paymentCancelled) ? (
                 <button
                   onClick={handleTryAgain}
                   className="w-full bg-[#007b3e] hover:bg-[#006231] text-white font-bold py-4 px-6 rounded-2xl text-lg flex items-center justify-center gap-2 transition duration-200"
@@ -391,7 +474,7 @@ export default function PayWarning({
                 className="w-full text-center text-gray-500 hover:text-gray-800 text-sm font-semibold transition py-2 flex items-center justify-center gap-1.5"
               >
                 <ArrowLeft className="w-4 h-4" />
-                {paymentFailed || paymentComplete ? 'Go back' : 'Cancel Payment'}
+                {paymentFailed || paymentComplete || paymentCancelled ? 'Go back' : 'Cancel Payment'}
               </button>
             </div>
           </div>

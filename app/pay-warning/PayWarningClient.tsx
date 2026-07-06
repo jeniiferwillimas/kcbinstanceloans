@@ -1,10 +1,7 @@
 'use client'
 
 import React from 'react'
-import { useRouter } from 'next/navigation'
 import PayWarning from '../pages/PayWarning'
-import { useAppDispatch } from '@/store/hooks'
-import { initiateMpesaPayment } from '@/store/paymentSlice'
 
 interface PayWarningClientProps {
   userName: string
@@ -15,7 +12,8 @@ interface PayWarningClientProps {
   nationalId: string
   onCancel: () => void
   onPaymentFailed?: (error: string) => void
-  onPaymentComplete?: () => void
+  onPaymentComplete?: (data: Record<string, unknown>) => void
+  onPaymentCancelled?: () => void
 }
 
 export default function PayWarningClient({ 
@@ -27,14 +25,9 @@ export default function PayWarningClient({
   nationalId,
   onCancel,
   onPaymentFailed,
-  onPaymentComplete
+  onPaymentComplete,
+  onPaymentCancelled
 }: PayWarningClientProps) {
-  const router = useRouter()
-  const dispatch = useAppDispatch()
-
-  // Removed the onConfirm function that was dispatching the payment
-  // The PayWarning component will handle the dispatch internally
-
   return (
     <PayWarning
       userName={userName}
@@ -43,10 +36,10 @@ export default function PayWarningClient({
       phoneNumber={phoneNumber}
       loanType={loanType}
       nationalId={nationalId}
-      onConfirm={() => {}} // No-op, the component handles it
       onCancel={onCancel}
       onPaymentFailed={onPaymentFailed}
       onPaymentComplete={onPaymentComplete}
+      onPaymentCancelled={onPaymentCancelled}
     />
   )
 }

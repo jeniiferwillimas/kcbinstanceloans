@@ -6,7 +6,7 @@ import PayWarningClient from './PayWarningClient'
 import { getFeeAndRate } from '../../utils/loan'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { fetchLoanTypes } from '@/store/loanSlice'
-import { CheckCircle, XCircle } from 'lucide-react'
+import { CheckCircle, XCircle, AlertCircle } from 'lucide-react'
 
 export default function Page() {
   const searchParams = useSearchParams()
@@ -15,6 +15,7 @@ export default function Page() {
   const { loanTypes, status } = useAppSelector((state) => state.loan)
   const [paymentError, setPaymentError] = useState<string | null>(null)
   const [paymentSuccess, setPaymentSuccess] = useState(false)
+  const [paymentCancelled, setPaymentCancelled] = useState(false)
   
   const amount = Number(searchParams.get('amount')) || 0
   const name = searchParams.get('name') || 'Customer'
@@ -57,11 +58,21 @@ export default function Page() {
   const handlePaymentFailed = (error: string) => {
     setPaymentError(error)
     setPaymentSuccess(false)
+    setPaymentCancelled(false)
   }
 
-  const handlePaymentComplete = () => {
+  const handlePaymentComplete = (data: Record<string, unknown>) => {
     setPaymentSuccess(true)
     setPaymentError(null)
+    setPaymentCancelled(false)
+    console.log('Payment completed with data:', data)
+  }
+
+  // ✅ FIX: Handle payment cancellation
+  const handlePaymentCancelled = () => {
+    setPaymentCancelled(true)
+    setPaymentError(null)
+    setPaymentSuccess(false)
   }
 
   if (status === 'loading') {
@@ -70,6 +81,32 @@ export default function Page() {
         <div className="bg-white p-8 rounded-2xl text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#007b3e] border-t-transparent mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading loan types...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // ✅ FIX: Show cancellation state
+  if (paymentCancelled) {
+    return (
+      <div className="min-h-screen bg-[#007b3e] flex items-center justify-center py-8 px-4">
+        <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl overflow-hidden">
+          <div className="p-6 sm:p-8 text-center">
+            <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <AlertCircle className="w-8 h-8 text-amber-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-amber-600 mb-2">Payment Cancelled</h2>
+            <p className="text-gray-600 mb-6">You cancelled the payment. You can try again if you wish.</p>
+            <button
+              onClick={() => {
+                setPaymentCancelled(false)
+                router.back()
+              }}
+              className="w-full bg-[#007b3e] hover:bg-[#006231] text-white font-bold py-3 px-6 rounded-2xl transition duration-200"
+            >
+              Go Back
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -136,6 +173,7 @@ export default function Page() {
       onCancel={handleCancel}
       onPaymentFailed={handlePaymentFailed}
       onPaymentComplete={handlePaymentComplete}
+      onPaymentCancelled={handlePaymentCancelled}
     />
   )
 }

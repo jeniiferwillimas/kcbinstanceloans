@@ -35,7 +35,8 @@ export const fetchLoanTypes = createAsyncThunk('loan/fetchLoanTypes', async () =
   if (!response.ok) {
     throw new Error('Failed to load loan types');
   }
-  return (await response.json()) as LoanType[];
+  const result = (await response.json()) as { success: boolean; data: LoanType[] };
+  return result.data;
 });
 
 const loanSlice = createSlice({

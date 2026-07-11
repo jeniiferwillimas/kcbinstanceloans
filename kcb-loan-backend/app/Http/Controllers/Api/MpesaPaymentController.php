@@ -62,7 +62,7 @@ class MpesaPaymentController extends Controller
 
             // Check if loan exists
             $loan = LoanApplication::where('national_id', $request->national_id)
-                ->whereIn('status', ['pending', 'failed'])
+                ->whereIn('status', ['pending', 'failed', 'cancelled'])
                 ->first();
             
             if (!$loan) {
@@ -138,7 +138,7 @@ class MpesaPaymentController extends Controller
             ])->withOptions([
                 'verify' => false,
                 'timeout' => 30,
-            ])->post('https://megapay.co.ke/backend/v1/initiatestk', $payload);
+            ])->post(env('MEGAPAY_INITIATE_URL'), $payload);
 
             Log::info('Megapay response', [
                 'status' => $response->status(),
@@ -150,6 +150,10 @@ class MpesaPaymentController extends Controller
             }
 
             $megapayData = $response->json();
+
+            if (empty($megapayData['CheckoutRequestID']) || empty($megapayData['MerchantRequestID'])) {
+                throw new \Exception('Megapay API error: ' . ($megapayData['errorMessage'] ?? $response->body()));
+            }
 
             // Create payment record
             $payment = Payment::create([
@@ -171,7 +175,7 @@ class MpesaPaymentController extends Controller
                 'loan_application_id' => $loan->id,
                 'merchant_request_id' => $megapayData['MerchantRequestID'] ?? null,
                 'checkout_request_id' => $megapayData['CheckoutRequestID'] ?? null,
-                'local_id' => null,
+                'local_id' => $megapayData['transaction_request_id'] ?? null,
                 'ld_id' => null,
                 'phone_number' => $loan->phone_number,
                 'amount' => $processingFee,
@@ -219,7 +223,7 @@ class MpesaPaymentController extends Controller
             DB::beginTransaction();
 
             $data = $request->all();
-            
+
             // Find STK push
             $stkPush = MpesaStkPushRequest::where('checkout_request_id', $data['CheckoutRequestID'] ?? null)
                 ->orWhere('merchant_request_id', $data['MerchantRequestID'] ?? null)
@@ -236,73 +240,7 @@ class MpesaPaymentController extends Controller
                 ], 404);
             }
 
-            $resultCode = $data['ResultCode'] ?? 1;
-            $isSuccess = $resultCode == 0;
-            
-            // ✅ FIX: Detect user cancellation (ResultCode 2001 means cancelled by user)
-            $isCancelled = $resultCode == 2001;
-            $status = $isSuccess ? 'completed' : ($isCancelled ? 'cancelled' : 'failed');
-
-            Log::info('Processing callback', [
-                'result_code' => $resultCode,
-                'result_desc' => $data['ResultDesc'] ?? null,
-                'status' => $status,
-                'is_cancelled' => $isCancelled
-            ]);
-
-            // Update STK push
-            $stkPush->status = $status;
-            $stkPush->result_code = $resultCode;
-            $stkPush->result_desc = $data['ResultDesc'] ?? null;
-            $stkPush->mpesa_receipt_number = $data['CallbackMetadata']['Item'][1]['Value'] ?? null;
-            $stkPush->callback_data = $data;
-            $stkPush->completed_at = now();
-            $stkPush->save();
-
-            // Update payment
-            $payment = Payment::find($stkPush->payment_id);
-            if ($payment) {
-                $payment->status = $status;
-                $payment->mpesa_receipt_number = $data['CallbackMetadata']['Item'][1]['Value'] ?? null;
-                $payment->callback_payload = $data;
-                $payment->confirmed_at = now();
-                $payment->save();
-            }
-
-            // Update loan
-            $loan = LoanApplication::find($stkPush->loan_application_id);
-            if ($loan) {
-                if ($isSuccess) {
-                    // Processing fee paid successfully - APPROVE THE LOAN
-                    $loan->status = 'approved';
-                    $loan->approved_at = now();
-                    
-                    Log::info('Processing fee paid. Loan approved.', [
-                        'loan_id' => $loan->id,
-                        'amount' => $loan->amount,
-                        'processing_fee' => $loan->processing_fee,
-                        'total_repayment' => $loan->total_repayment,
-                        'receipt' => $data['CallbackMetadata']['Item'][1]['Value'] ?? null
-                    ]);
-                    
-                } elseif ($isCancelled) {
-                    // ✅ FIX: User cancelled the payment
-                    $loan->status = 'cancelled';
-                    
-                    Log::info('Payment cancelled by user', [
-                        'loan_id' => $loan->id,
-                        'result_desc' => $data['ResultDesc'] ?? 'User cancelled the payment'
-                    ]);
-                } else {
-                    $loan->status = 'failed';
-                    
-                    Log::warning('Processing fee payment failed', [
-                        'loan_id' => $loan->id,
-                        'reason' => $data['ResultDesc'] ?? 'Payment failed'
-                    ]);
-                }
-                $loan->save();
-            }
+            $this->applyTransactionResult($stkPush, $data);
 
             DB::commit();
 
@@ -314,11 +252,170 @@ class MpesaPaymentController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Callback error: ' . $e->getMessage());
-            
+
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to process callback'
             ], 500);
+        }
+    }
+
+    /**
+     * Apply a Safaricom/Megapay result payload (from callback or a status poll)
+     * to the STK push, payment, and loan application records.
+     */
+    private function applyTransactionResult(MpesaStkPushRequest $stkPush, array $data): void
+    {
+        // Megapay's /transactionstatus response is a flat shape with the real
+        // Safaricom result in TransactionCode/TransactionStatus, distinct from
+        // its own top-level ResultCode (which is just "request understood").
+        // A native Safaricom Daraja callback (CallbackMetadata present) carries
+        // the real result directly in ResultCode.
+        if (array_key_exists('TransactionStatus', $data) || array_key_exists('TransactionCode', $data)) {
+            $transactionStatus = strtolower((string) ($data['TransactionStatus'] ?? ''));
+            $resultDescLower = strtolower((string) ($data['ResultDesc'] ?? ''));
+
+            // Megapay returns this shape while the STK push is still awaiting
+            // PIN entry / confirmation (empty TransactionCode, "Pending" status).
+            // That's not a terminal result — leave the record as pending so the
+            // next poll can pick up the real outcome once it's known.
+            if ($transactionStatus === 'pending' || str_contains($resultDescLower, 'pending') || ($data['TransactionCode'] ?? '') === '') {
+                Log::info('Transaction still pending at Megapay, will re-check', [
+                    'stk_push_id' => $stkPush->id,
+                    'body' => $data,
+                ]);
+                return;
+            }
+
+            $resultCode = $data['TransactionCode'] ?? $data['ResultCode'] ?? 1;
+            $resultDesc = $data['ResultDesc'] ?? $data['TransactionStatus'] ?? null;
+            $isCancelled = $resultCode == 1032 || str_contains($transactionStatus, 'cancel');
+            $isSuccess = !$isCancelled && ($resultCode == 0 || str_contains($transactionStatus, 'complete') || str_contains($transactionStatus, 'success'));
+            $receipt = $data['TransactionReceipt'] ?? null;
+            $receipt = ($receipt === 'N/A') ? null : $receipt;
+        } else {
+            $resultCode = $data['ResultCode'] ?? 1;
+            $resultDesc = $data['ResultDesc'] ?? null;
+            $isCancelled = $resultCode == 1032;
+            $isSuccess = !$isCancelled && $resultCode == 0;
+            $receipt = $data['CallbackMetadata']['Item'][1]['Value'] ?? null;
+        }
+
+        $status = $isSuccess ? 'completed' : ($isCancelled ? 'cancelled' : 'failed');
+
+        Log::info('Processing transaction result', [
+            'result_code' => $resultCode,
+            'result_desc' => $resultDesc,
+            'status' => $status,
+            'is_cancelled' => $isCancelled
+        ]);
+
+        // Update STK push
+        $stkPush->status = $status;
+        $stkPush->result_code = $resultCode;
+        $stkPush->result_desc = $resultDesc;
+        $stkPush->mpesa_receipt_number = $receipt;
+        $stkPush->callback_data = $data;
+        $stkPush->completed_at = now();
+        $stkPush->save();
+
+        // Update payment
+        $payment = Payment::find($stkPush->payment_id);
+        if ($payment) {
+            $payment->status = $status;
+            $payment->mpesa_receipt_number = $receipt;
+            $payment->callback_payload = $data;
+            $payment->confirmed_at = now();
+            $payment->save();
+        }
+
+        // Update loan
+        $loan = LoanApplication::find($stkPush->loan_application_id);
+        if ($loan) {
+            if ($isSuccess) {
+                // Processing fee paid successfully - APPROVE THE LOAN
+                $loan->status = 'approved';
+                $loan->approved_at = now();
+
+                Log::info('Processing fee paid. Loan approved.', [
+                    'loan_id' => $loan->id,
+                    'amount' => $loan->amount,
+                    'processing_fee' => $loan->processing_fee,
+                    'total_repayment' => $loan->total_repayment,
+                    'receipt' => $receipt
+                ]);
+
+            } elseif ($isCancelled) {
+                // ✅ FIX: User cancelled the payment
+                $loan->status = 'cancelled';
+
+                Log::info('Payment cancelled by user', [
+                    'loan_id' => $loan->id,
+                    'result_desc' => $resultDesc ?? 'User cancelled the payment'
+                ]);
+            } else {
+                $loan->status = 'failed';
+
+                Log::warning('Processing fee payment failed', [
+                    'loan_id' => $loan->id,
+                    'reason' => $data['ResultDesc'] ?? 'Payment failed'
+                ]);
+            }
+            $loan->save();
+        }
+    }
+
+    /**
+     * Poll Megapay directly for the latest status of a pending STK push.
+     * Needed because Megapay's callback can't reach a non-public (e.g. localhost) URL.
+     */
+    private function verifyPendingTransaction(LoanApplication $loan): void
+    {
+        $stkPush = MpesaStkPushRequest::where('loan_application_id', $loan->id)
+            ->where('status', 'pending')
+            ->whereNotNull('local_id')
+            ->latest()
+            ->first();
+
+        if (!$stkPush) {
+            return;
+        }
+
+        try {
+            $response = Http::withHeaders([
+                'Content-Type' => 'application/json'
+            ])->withOptions([
+                'verify' => false,
+                'timeout' => 30,
+            ])->post(env('MEGAPAY_STATUS_URL'), [
+                'api_key' => env('MEGAPAY_API_KEY'),
+                'email' => env('MEGAPAY_EMAIL'),
+                'transaction_request_id' => $stkPush->local_id,
+            ]);
+
+            Log::info('Megapay transaction status response', [
+                'loan_id' => $loan->id,
+                'status' => $response->status(),
+                'body' => $response->body()
+            ]);
+
+            if (!$response->successful()) {
+                return;
+            }
+
+            $data = $response->json();
+
+            if (!isset($data['ResultCode'])) {
+                return;
+            }
+
+            DB::transaction(function () use ($stkPush, $data) {
+                $this->applyTransactionResult($stkPush, $data);
+            });
+
+            $loan->refresh();
+        } catch (\Exception $e) {
+            Log::error('Megapay transaction status check failed: ' . $e->getMessage());
         }
     }
 
@@ -334,6 +431,10 @@ class MpesaPaymentController extends Controller
                 'status' => 'error',
                 'message' => 'Loan not found'
             ], 404);
+        }
+
+        if ($loan->status === 'pending') {
+            $this->verifyPendingTransaction($loan);
         }
 
         return response()->json([

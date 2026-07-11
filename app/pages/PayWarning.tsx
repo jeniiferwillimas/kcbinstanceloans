@@ -56,7 +56,8 @@ export default function PayWarning({
   const [errorMessage, setErrorMessage] = useState('')
   const [loanId, setLoanId] = useState<number | null>(null)
   const pollingInterval = useRef<NodeJS.Timeout | null>(null)
-  const maxPollAttempts = 60 // 5 minutes (60 * 5 seconds)
+  const pollIntervalMs = 2000
+  const maxPollAttempts = 150 // 5 minutes (150 * 2 seconds)
   const isPollingActive = useRef(false)
 
   const displayPhone = formatForDisplay(phoneNumber)
@@ -85,14 +86,14 @@ export default function PayWarning({
       if (pollingInterval.current) {
         clearInterval(pollingInterval.current)
       }
-      
-      pollingInterval.current = setInterval(async () => {
+
+      const pollStatus = async () => {
         // Increment poll count in Redux
         dispatch(incrementPollCount())
-        
+
         // Get current poll count from state
         const currentPollCount = paymentState.pollCount + 1
-        
+
         try {
           const result = await dispatch(checkPaymentStatus({ loan_id: loanId })).unwrap()
           
@@ -164,7 +165,11 @@ export default function PayWarning({
           console.error('Status check error:', error)
           // Don't fail on a single error, keep polling
         }
-      }, 5000) // Poll every 5 seconds
+      }
+
+      // Check immediately instead of waiting for the first interval tick
+      pollStatus()
+      pollingInterval.current = setInterval(pollStatus, pollIntervalMs)
     }
 
     return () => {
@@ -173,7 +178,7 @@ export default function PayWarning({
         isPollingActive.current = false
       }
     }
-  }, [loanId, paymentComplete, paymentFailed, paymentCancelled, paymentState.status, dispatch, onPaymentComplete, onPaymentFailed, onPaymentCancelled, currentStep, maxPollAttempts])
+  }, [loanId, paymentComplete, paymentFailed, paymentCancelled, paymentState.status, dispatch, onPaymentComplete, onPaymentFailed, onPaymentCancelled, currentStep, maxPollAttempts, pollIntervalMs])
 
   // Update steps based on payment state from Redux
   useEffect(() => {

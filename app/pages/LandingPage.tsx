@@ -11,7 +11,7 @@ export default function LandingPage() {
   const handleApplyClick = (e: React.MouseEvent) => {
     e.preventDefault()
     setIsLoading(true)
-    
+
     // Navigate after a delay to show the loading state
     setTimeout(() => {
       window.location.href = '/apply'
@@ -30,16 +30,16 @@ export default function LandingPage() {
                 <div className="absolute inset-0 border-4 border-gray-200 rounded-full"></div>
                 <div className="absolute inset-0 border-4 border-[#1a3c6e] rounded-full border-t-transparent animate-spin"></div>
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <Image 
-                    src="/image.png" 
-                    alt="KCB Logo" 
-                    width={32} 
+                  <Image
+                    src="/image.png"
+                    alt="KCB Logo"
+                    width={32}
                     height={32}
                     className="object-contain"
                   />
                 </div>
               </div>
-              
+
               {/* Loading Message */}
               <h3 className="text-xl font-semibold text-[#1a3c6e] mb-2">
                 Preparing your application...
@@ -47,7 +47,7 @@ export default function LandingPage() {
               <p className="text-gray-600 text-sm mb-4">
                 Secure connection established
               </p>
-              
+
               {/* Animated dots */}
               <div className="flex gap-2">
                 <div className="w-2 h-2 bg-[#1a3c6e] rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
@@ -64,9 +64,9 @@ export default function LandingPage() {
         <div className="container-custom py-4 flex justify-between items-center">
           <div className="flex items-center gap-2">
             <div className="relative w-12 h-12">
-              <Image 
-                src="/image.png" 
-                alt="KCB Logo" 
+              <Image
+                src="/image.png"
+                alt="KCB Logo"
                 fill
                 className="object-contain"
               />
@@ -113,7 +113,7 @@ export default function LandingPage() {
               </div>
             </div>
 
-            <button 
+            <button
               onClick={handleApplyClick}
               disabled={isLoading}
               className="bg-[#e31e24] hover:bg-[#c41a1f] text-white font-semibold py-3 px-8 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
@@ -131,10 +131,10 @@ export default function LandingPage() {
 
           {/* Right Content - Hero Image */}
           <div className="relative">
-            <Image 
-              src="/image.png" 
-              alt="KCB M-PESA Loan Offer" 
-              width={500} 
+            <Image
+              src="/image.png"
+              alt="KCB M-PESA Loan Offer"
+              width={500}
               height={400}
               className="rounded-2xl shadow-xl w-full h-auto"
               priority
@@ -222,16 +222,17 @@ export default function LandingPage() {
       </section>
 
       {/* Footer */}
+      {/* Footer */}
       <footer className="bg-[#1a3c6e] text-white py-8 mt-8">
         <div className="container-custom">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="flex items-center gap-3">
               <div className="relative w-10 h-10">
-                <Image 
-                  src="/image.png" 
-                  alt="KCB Logo" 
+                <Image
+                  src="/image.png"
+                  alt="KCB Logo"
                   fill
-                  className="object-contain brightness-0 invert"
+                  className="object-contain"
                 />
               </div>
               <span className="text-sm">KCB M-PESA Loans</span>

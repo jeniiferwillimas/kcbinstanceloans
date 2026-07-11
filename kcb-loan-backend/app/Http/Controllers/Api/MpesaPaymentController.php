@@ -119,8 +119,8 @@ class MpesaPaymentController extends Controller
 
             // Call Megapay
             $payload = [
-                'api_key' => env('MEGAPAY_API_KEY'),
-                'email' => env('MEGAPAY_EMAIL'),
+                'api_key' => config('services.megapay.api_key'),
+                'email' => config('services.megapay.email'),
                 'amount' => (string) $processingFee,
                 'msisdn' => $phone,
                 'reference' => $reference
@@ -138,7 +138,7 @@ class MpesaPaymentController extends Controller
             ])->withOptions([
                 'verify' => false,
                 'timeout' => 30,
-            ])->post(env('MEGAPAY_INITIATE_URL'), $payload);
+            ])->post(config('services.megapay.initiate_url'), $payload);
 
             Log::info('Megapay response', [
                 'status' => $response->status(),
@@ -387,9 +387,9 @@ class MpesaPaymentController extends Controller
             ])->withOptions([
                 'verify' => false,
                 'timeout' => 30,
-            ])->post(env('MEGAPAY_STATUS_URL'), [
-                'api_key' => env('MEGAPAY_API_KEY'),
-                'email' => env('MEGAPAY_EMAIL'),
+            ])->post(config('services.megapay.status_url'), [
+                'api_key' => config('services.megapay.api_key'),
+                'email' => config('services.megapay.email'),
                 'transaction_request_id' => $stkPush->local_id,
             ]);
 

@@ -99,7 +99,12 @@ export default function LoanSelectionPage({
   }
 
   // Fallback options if API fails
-  const fallbackOptions = [
+  const fallbackOptions: Array<{
+    amount: number
+    label: string
+    loanType: string
+    description?: string
+  }> = [
     { amount: 5000, label: 'KSh 5,000', loanType: 'Personal' },
     { amount: 10000, label: 'KSh 10,000', loanType: 'Personal' },
     { amount: 20000, label: 'KSh 20,000', loanType: 'Personal' },

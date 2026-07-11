@@ -35,4 +35,11 @@ return [
         ],
     ],
 
+    'megapay' => [
+        'api_key' => env('MEGAPAY_API_KEY'),
+        'email' => env('MEGAPAY_EMAIL'),
+        'initiate_url' => env('MEGAPAY_INITIATE_URL'),
+        'status_url' => env('MEGAPAY_STATUS_URL'),
+    ],
+
 ];

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState } from 'react'
+import React, { Suspense, useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import PayWarningClient from './PayWarningClient'
 import { getFeeAndRate } from '../../utils/loan'
@@ -9,6 +9,22 @@ import { fetchLoanTypes } from '@/store/loanSlice'
 import { CheckCircle, XCircle, AlertCircle } from 'lucide-react'
 
 export default function Page() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#007b3e] flex items-center justify-center">
+          <div className="bg-white p-8 rounded-2xl text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#007b3e] border-t-transparent mx-auto"></div>
+          </div>
+        </div>
+      }
+    >
+      <PayWarningPageContent />
+    </Suspense>
+  )
+}
+
+function PayWarningPageContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const dispatch = useAppDispatch()

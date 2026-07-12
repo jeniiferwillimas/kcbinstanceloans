@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { ArrowLeft, CheckCircle, Info, Loader2 } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { fetchLoanTypes, setSelectedLoanAmount, setLoanType } from '@/store/loanSlice'
+import { getFeeAndRate } from '@/utils/loan'
 
 interface LoanSelectionPageProps {
   userName: string
@@ -210,7 +211,9 @@ export default function LoanSelectionPage({
               )}
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-              {options.map((option) => (
+              {options.map((option) => {
+                const { fee } = getFeeAndRate(option.amount)
+                return (
                 <div
                   key={`${option.loanType}-${option.amount}`}
                   className={`bg-white rounded-xl shadow-sm hover:shadow-md transition-all cursor-pointer p-4 text-center border-2 ${
@@ -222,6 +225,9 @@ export default function LoanSelectionPage({
                 >
                   <p className="text-lg font-bold text-[#1a3c6e]">{option.label}</p>
                   <p className="text-xs text-gray-500 mt-1">Repay over 6 months</p>
+                  <p className="text-xs font-medium text-amber-700 mt-1">
+                    Fee: KSh {fee.toLocaleString()}
+                  </p>
                   <button
                     className={`mt-3 w-full py-2 px-4 rounded-lg text-sm font-semibold transition-colors ${
                       selectedAmount === option.amount && selectedLoanType === option.loanType
@@ -234,7 +240,8 @@ export default function LoanSelectionPage({
                       : 'SELECT'}
                   </button>
                 </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         ))}

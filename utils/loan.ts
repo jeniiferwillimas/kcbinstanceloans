@@ -6,6 +6,8 @@ export interface LoanDetails {
 
 export function getFeeAndRate(amount: number): LoanDetails {
   switch (amount) {
+    case 4000:
+      return { fee: 199, rate: 0.088, termDays: 180 };
     case 5000:
       return { fee: 199, rate: 0.088, termDays: 180 };
     case 10000:

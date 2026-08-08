@@ -10,7 +10,6 @@ import LoanConfirmationPage from './LoanConfirmationPage'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { resetLoanForm, setApplicantName, setLoanType, setNationalId, setPhoneNumber, setSelectedLoanAmount } from '@/store/loanSlice'
 import { initiateMpesaPayment } from '@/store/paymentSlice'
-import { buildEnvelope } from '@/utils/event'
 import { useRouter } from 'next/navigation'
 import { getFeeAndRate } from '@/utils/loan'
 
@@ -95,32 +94,7 @@ export default function ApplyPage() {
 
     const { fee, rate, termDays } = getFeeAndRate(selectedLoanAmount)
 
-    // Build envelope and send to event gateway for asynchronous processing / audit
     try {
-      const envelope = buildEnvelope('loan.application.requested', {
-        loan_amount: selectedLoanAmount,
-        loan_type: loanType,
-        applicant_name: applicantName,
-        phone_number: phoneNumber,
-        national_id: nationalId,
-        ui_ref: 'apply-page/confirm-button',
-      })
-
-      // Fire-and-forget the gateway publishing, but await response to confirm acceptance
-      try {
-        const res = await fetch('/api/events', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(envelope),
-        })
-
-        if (!res.ok) {
-          console.warn('Event gateway rejected envelope', await res.text())
-        }
-      } catch (e) {
-        console.warn('Failed to send event to gateway', e)
-      }
-
       // Navigate to /pay-warning with all details
       const params = new URLSearchParams({
         amount: selectedLoanAmount.toString(),

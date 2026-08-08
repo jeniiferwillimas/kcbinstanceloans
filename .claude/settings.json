@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new root@164.90.176.53 \"echo CONNECTED && cat /etc/os-release | grep PRETTY\")",
+      "Bash(ssh root@164.90.176.53 'bash -s')",
+      "Bash(ssh root@164.90.176.53 \"sudo -u deploy -H cat /home/deploy/.gitconfig\")",
+      "Bash(ssh root@164.90.176.53 \"ls /var/www/loan-app && cd /var/www/loan-app && git log -1 --oneline\")",
+      "Bash(ssh root@164.90.176.53 \"sudo -u deploy tee /var/www/loan-app/.env.production > /dev/null\")",
+      "Bash(curl -sI http://164.90.176.53/)",
+      "Bash(curl -s http://164.90.176.53/api/loan-types)",
+      "Bash(ssh root@164.90.176.53 \"systemctl is-active nginx php8.3-fpm postgresql laravel-queue ssh\")",
+      "Bash(ssh root@164.90.176.53 \"dig +short mykcbloans.com A; echo '---www---'; dig +short www.mykcbloans.com A\")",
+      "Bash(ssh root@164.90.176.53 \"curl -sI http://mykcbloans.com/ | head -3\")",
+      "Bash(ssh root@164.90.176.53 \"certbot --nginx -d mykcbloans.com -d www.mykcbloans.com --non-interactive --agree-tos -m jethrosumbeiywet@gmail.com --redirect 2>&1\")",
+      "Bash(ssh root@164.90.176.53 \"curl -s https://mykcbloans.com/api/loan-types | head -c 300; echo ''; curl -sI https://mykcbloans.com/ | head -3; echo '---services---'; systemctl is-active nginx php8.3-fpm postgresql laravel-queue ssh\")"
+    ]
+  }
+}

@@ -51,28 +51,19 @@ export default function LoanSelectionPage({
     }> = []
 
     loanTypes.forEach((loan) => {
-      // Use max_amount if available, otherwise generate amounts based on loan type
-      if (loan.max_amount) {
+      // Always generate a tiered spread of amounts based on loan type name,
+      // rather than a single option pinned to max_amount.
+      const baseAmount = getBaseAmountForLoanType(loan.name)
+      const amounts = generateAmounts(baseAmount)
+
+      amounts.forEach(amount => {
         options.push({
-          amount: loan.max_amount,
-          label: `KSh ${loan.max_amount.toLocaleString()}`,
+          amount: amount,
+          label: `KSh ${amount.toLocaleString()}`,
           loanType: loan.name,
           description: loan.description
         })
-      } else {
-        // Generate dynamic amounts based on loan type name
-        const baseAmount = getBaseAmountForLoanType(loan.name)
-        const amounts = generateAmounts(baseAmount)
-        
-        amounts.forEach(amount => {
-          options.push({
-            amount: amount,
-            label: `KSh ${amount.toLocaleString()}`,
-            loanType: loan.name,
-            description: loan.description
-          })
-        })
-      }
+      })
     })
 
     return options
